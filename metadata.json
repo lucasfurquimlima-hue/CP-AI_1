@@ -1,0 +1,8 @@
+{
+  "name": "CreativeTech - Guia de Estilo",
+  "description": "Plataforma demonstrativa de design e comunicação digital com foco em cores de alta retenção.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
