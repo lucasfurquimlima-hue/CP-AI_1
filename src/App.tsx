@@ -3,25 +3,143 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { motion } from "motion/react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { GoogleGenAI, Type } from "@google/genai";
 import { 
   Rocket, 
   Palette, 
-  Type, 
+  Type as TypeIcon, 
   Layout as LayoutIcon, 
-  CheckCircle2, 
   ArrowRight, 
   Github, 
   Instagram, 
   Linkedin,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
   Monitor,
   Smartphone,
-  Layers
+  MousePointer2,
+  Bell,
+  Menu,
+  X
 } from "lucide-react";
 
+// Configuração do Schema para resposta estruturada
+const styleGuideSchema = {
+  type: Type.OBJECT,
+  properties: {
+    toneOfVoice: {
+      type: Type.OBJECT,
+      properties: {
+        description: { type: Type.STRING },
+        keywords: { type: Type.ARRAY, items: { type: Type.STRING } }
+      },
+      required: ["description", "keywords"]
+    },
+    colorPalette: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          hex: { type: Type.STRING },
+          name: { type: Type.STRING },
+          usage: { type: Type.STRING }
+        },
+        required: ["hex", "name", "usage"]
+      }
+    },
+    typography: {
+      type: Type.OBJECT,
+      properties: {
+        heading: { type: Type.STRING },
+        body: { type: Type.STRING },
+        googleFontsUrl: { type: Type.STRING }
+      },
+      required: ["heading", "body", "googleFontsUrl"]
+    },
+    layout: {
+      type: Type.OBJECT,
+      properties: {
+        style: { type: Type.STRING },
+        header: { type: Type.STRING },
+        buttons: { type: Type.STRING }
+      },
+      required: ["style", "header", "buttons"]
+    },
+    ideas: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING }
+    }
+  },
+  required: ["toneOfVoice", "colorPalette", "typography", "layout", "ideas"]
+};
+
 export default function App() {
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
+  const [previewNotification, setPreviewNotification] = useState<string | null>(null);
+
+  // Efeito para carregar as fontes dinamicamente
+  useEffect(() => {
+    if (result?.typography?.googleFontsUrl) {
+      const link = document.createElement("link");
+      link.href = result.typography.googleFontsUrl;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+      return () => {
+        document.head.removeChild(link);
+      };
+    }
+  }, [result]);
+
+  const generateStyleGuide = async () => {
+    if (!prompt.trim()) return;
+    
+    setLoading(true);
+    setError("");
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Gere um guia de estilo completo para o seguinte projeto: "${prompt}". 
+        O guia deve incluir Tom de Voz (amigável e profissional), Paleta de Cores (use tons que façam sentido, mas tente incluir variações inspiradas em #2155a3, #4321a3, #2183a3, #a32132 se apropriado), Tipografia do Google Fonts, Estilo de Componentes e Layout.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: styleGuideSchema,
+          systemInstruction: "Você é um especialista em design e comunicação digital. Gere guias de estilo criativos e profissionais em Português."
+        }
+      });
+
+      const data = JSON.parse(response.text);
+      setResult(data);
+      
+      setTimeout(() => {
+        document.getElementById("resultado")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+
+    } catch (err) {
+      console.error(err);
+      setError("Ocorreu um erro ao gerar o guia. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showNotification = (msg: string) => {
+    setPreviewNotification(msg);
+    setTimeout(() => setPreviewNotification(null), 3000);
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-slate-50">
       {/* HEADER */}
       <header className="glass-header">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -35,188 +153,386 @@ export default function App() {
           </div>
           
           <nav className="hidden md:flex items-center gap-8 font-semibold text-brand-blue-dark/80">
-            <a href="#guia" className="hover:text-brand-magenta transition-colors">Guia de Estilo</a>
-            <a href="#componentes" className="hover:text-brand-magenta transition-colors">Componentes</a>
-            <a href="#preview" className="hover:text-brand-magenta transition-colors">Preview</a>
+            <a href="#gerador" className="hover:text-brand-magenta transition-colors">Gerador</a>
+            <a href="#sobre" className="hover:text-brand-magenta transition-colors">Como Funciona</a>
           </nav>
 
           <button className="btn-primary text-sm px-6 py-2">
-            Começar Agora
+            Login
           </button>
         </div>
       </header>
 
       <main className="flex-grow">
-        {/* HERO SECTION */}
-        <section className="relative py-24 overflow-hidden bg-brand-blue-dark text-white">
+        {/* HERO & GENERATOR */}
+        <section id="gerador" className="relative py-20 overflow-hidden bg-brand-blue-dark text-white">
           <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-0 left-0 w-96 h-96 bg-brand-purple rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2"></div>
-            <div className="absolute bottom-0 right-0 w-96 h-96 bg-brand-blue-light rounded-full blur-[120px] translate-x-1/2 translate-y-1/2"></div>
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,#4321a3,transparent_70%)]"></div>
           </div>
 
-          <div className="max-w-7xl mx-auto px-6 relative z-10 grid lg:grid-cols-2 gap-12 items-center">
-            <motion.div 
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
+          <div className="max-w-4xl mx-auto px-6 relative z-10 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <h1 className="text-5xl md:text-7xl font-extrabold leading-tight mb-6">
-                Design que <span className="text-brand-blue-light">Prende</span> a Atenção.
+              <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mb-6">
+                Dê vida à sua <span className="text-brand-blue-light">Ideia</span> com IA.
               </h1>
-              <p className="text-xl text-blue-100 mb-10 max-w-lg leading-relaxed">
-                Transformamos sua visão em uma experiência digital memorável, unindo técnica profissional com uma estética vibrante.
+              <p className="text-lg text-blue-100 mb-10 max-w-2xl mx-auto">
+                Descreva seu negócio ou projeto abaixo e nossa inteligência artificial criará um Guia de Estilo completo em segundos com preview interativo.
               </p>
-              <div className="flex flex-wrap gap-4">
-                <button className="btn-primary flex items-center gap-2">
-                  Ver Projetos <ArrowRight size={20} />
-                </button>
-                <button className="px-8 py-3 rounded-full border-2 border-white/30 font-bold hover:bg-white/10 transition-all">
-                  Saiba Mais
+
+              <div className="relative max-w-2xl mx-auto">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Ex: Uma cafeteria moderna e aconchegante para nômades digitais..."
+                  className="w-full p-6 pr-16 rounded-3xl bg-white/10 border-2 border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-brand-magenta transition-all resize-none h-32 text-lg"
+                />
+                <button 
+                  onClick={generateStyleGuide}
+                  disabled={loading || !prompt}
+                  className="absolute bottom-4 right-4 w-12 h-12 bg-brand-magenta rounded-2xl flex items-center justify-center hover:scale-110 transition-all disabled:opacity-50 disabled:scale-100"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : <Sparkles />}
                 </button>
               </div>
+              {error && <p className="mt-4 text-red-400 font-medium">{error}</p>}
             </motion.div>
+          </div>
+        </section>
 
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative"
+        {/* RESULT SECTION */}
+        <AnimatePresence>
+          {result && (
+            <motion.section 
+              id="resultado"
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="py-24 bg-white"
             >
-              <img 
-                src="https://images.unsplash.com/photo-1551434678-e076c223a692?q=80&w=2070&auto=format&fit=crop" 
-                alt="Equipe Criativa" 
-                className="rounded-3xl shadow-2xl border-8 border-white/10"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-2xl shadow-xl text-brand-blue-dark hidden md:block">
-                <div className="flex items-center gap-3 mb-2">
-                  <CheckCircle2 className="text-brand-magenta" />
-                  <span className="font-bold">Alta Performance</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="text-brand-magenta" />
-                  <span className="font-bold">Design Exclusivo</span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* GUIA DE ESTILO SECTION */}
-        <section id="guia" className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl font-extrabold text-brand-blue-dark mb-4">Guia de Estilo Completo</h2>
-              <p className="text-slate-500 max-w-2xl mx-auto">A base sólida para uma comunicação digital coerente e impactante.</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {/* TOM DE VOZ */}
-              <div className="p-8 rounded-3xl bg-slate-50 border border-slate-100 hover:shadow-lg transition-all">
-                <div className="w-12 h-12 bg-brand-blue-dark/10 rounded-2xl flex items-center justify-center text-brand-blue-dark mb-6">
-                  <Rocket size={24} />
-                </div>
-                <h3 className="text-xl font-bold mb-4">1. Tom de Voz</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  Amigável e profissional. Uma mistura equilibrada entre proximidade e autoridade técnica.
-                </p>
-              </div>
-
-              {/* PALETA DE CORES */}
-              <div className="p-8 rounded-3xl bg-slate-50 border border-slate-100 hover:shadow-lg transition-all">
-                <div className="w-12 h-12 bg-brand-purple/10 rounded-2xl flex items-center justify-center text-brand-purple mb-6">
-                  <Palette size={24} />
-                </div>
-                <h3 className="text-xl font-bold mb-4">2. Paleta de Cores</h3>
-                <div className="flex gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-full bg-[#2155a3]" title="Azul Escuro"></div>
-                  <div className="w-8 h-8 rounded-full bg-[#4321a3]" title="Roxo"></div>
-                  <div className="w-8 h-8 rounded-full bg-[#2183a3]" title="Azul Claro"></div>
-                  <div className="w-8 h-8 rounded-full bg-[#a32132]" title="Magenta"></div>
-                </div>
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  Cores vibrantes escolhidas para prender a atenção e guiar o olhar do usuário.
-                </p>
-              </div>
-
-              {/* TIPOGRAFIA */}
-              <div className="p-8 rounded-3xl bg-slate-50 border border-slate-100 hover:shadow-lg transition-all">
-                <div className="w-12 h-12 bg-brand-blue-light/10 rounded-2xl flex items-center justify-center text-brand-blue-light mb-6">
-                  <Type size={24} />
-                </div>
-                <h3 className="text-xl font-bold mb-4">3. Tipografia</h3>
-                <div className="space-y-2">
-                  <p className="font-montserrat font-bold text-sm">Montserrat (Títulos)</p>
-                  <p className="font-open-sans text-sm">Open Sans (Corpo)</p>
-                </div>
-              </div>
-
-              {/* LAYOUT */}
-              <div className="p-8 rounded-3xl bg-slate-50 border border-slate-100 hover:shadow-lg transition-all">
-                <div className="w-12 h-12 bg-brand-magenta/10 rounded-2xl flex items-center justify-center text-brand-magenta mb-6">
-                  <LayoutIcon size={24} />
-                </div>
-                <h3 className="text-xl font-bold mb-4">4. Layout</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  Visual e dinâmico. Uso estratégico de espaços e componentes arredondados.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* COMPONENTES PREVIEW */}
-        <section id="componentes" className="py-24 bg-slate-50">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="grid lg:grid-cols-2 gap-16 items-center">
-              <div>
-                <h2 className="text-4xl font-extrabold text-brand-blue-dark mb-6">Componentes de Interface</h2>
-                <p className="text-slate-600 mb-8 leading-relaxed">
-                  Nossos componentes são desenhados para serem táteis e intuitivos. O uso de bordas arredondadas e sombras suaves cria uma interface acolhedora.
-                </p>
-                
-                <div className="space-y-8">
-                  <div className="flex flex-col gap-4">
-                    <span className="text-sm font-bold uppercase tracking-widest text-slate-400">Botões</span>
-                    <div className="flex flex-wrap gap-4">
-                      <button className="btn-primary">Botão Primário</button>
-                      <button className="btn-secondary">Botão Secundário</button>
-                    </div>
+              <div className="max-w-7xl mx-auto px-6">
+                <div className="flex items-center justify-between mb-12 border-b pb-8">
+                  <div>
+                    <h2 className="text-3xl font-extrabold text-brand-blue-dark">Seu Guia de Estilo</h2>
+                    <p className="text-slate-500">Gerado sob medida para: <span className="italic">"{prompt}"</span></p>
                   </div>
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 text-brand-purple font-bold hover:underline"
+                  >
+                    <Copy size={18} /> Exportar PDF
+                  </button>
+                </div>
 
-                  <div className="flex flex-col gap-4">
-                    <span className="text-sm font-bold uppercase tracking-widest text-slate-400">Cards de Serviço</span>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <Layers className="text-brand-purple mb-4" />
-                        <h4 className="font-bold mb-2">Desenvolvimento</h4>
-                        <p className="text-sm text-slate-500">Sistemas robustos e escaláveis.</p>
+                <div className="grid lg:grid-cols-3 gap-8 mb-16">
+                  {/* COLUNA 1: TOM E CORES */}
+                  <div className="space-y-8">
+                    <div className="p-8 rounded-[32px] bg-slate-50 border border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <Rocket className="text-brand-magenta" />
+                        <h3 className="text-xl font-bold">Tom de Voz</h3>
                       </div>
-                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <Monitor className="text-brand-blue-light mb-4" />
-                        <h4 className="font-bold mb-2">Web Design</h4>
-                        <p className="text-sm text-slate-500">Interfaces que convertem.</p>
+                      <p className="text-slate-600 leading-relaxed mb-6">{result.toneOfVoice.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {result.toneOfVoice.keywords.map((kw: string) => (
+                          <span key={kw} className="px-3 py-1 bg-white rounded-full text-xs font-bold text-brand-blue-dark border border-slate-200">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-8 rounded-[32px] bg-slate-50 border border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <Palette className="text-brand-purple" />
+                        <h3 className="text-xl font-bold">Paleta de Cores</h3>
+                      </div>
+                      <div className="space-y-4">
+                        {result.colorPalette.map((color: any) => (
+                          <div key={color.hex} className="flex items-center gap-4">
+                            <div 
+                              className="w-12 h-12 rounded-2xl shadow-inner border border-black/5" 
+                              style={{ backgroundColor: color.hex }}
+                            ></div>
+                            <div>
+                              <p className="font-bold text-sm">{color.name}</p>
+                              <p className="text-xs text-slate-400 uppercase">{color.hex}</p>
+                              <p className="text-[10px] text-slate-500 mt-1">{color.usage}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
+
+                  {/* COLUNA 2: TIPOGRAFIA E LAYOUT */}
+                  <div className="space-y-8">
+                    <div className="p-8 rounded-[32px] bg-slate-50 border border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <TypeIcon className="text-brand-blue-light" />
+                        <h3 className="text-xl font-bold">Tipografia</h3>
+                      </div>
+                      <div className="space-y-6">
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-2">Títulos</p>
+                          <p className="text-2xl font-bold" style={{ fontFamily: result.typography.heading }}>
+                            {result.typography.heading}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-2">Corpo</p>
+                          <p className="text-base" style={{ fontFamily: result.typography.body }}>
+                            {result.typography.body}
+                          </p>
+                        </div>
+                        <a 
+                          href={result.typography.googleFontsUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 text-brand-blue-dark text-sm font-bold hover:underline"
+                        >
+                          Ver no Google Fonts <ExternalLink size={14} />
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="p-8 rounded-[32px] bg-slate-50 border border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <LayoutIcon className="text-brand-magenta" />
+                        <h3 className="text-xl font-bold">Layout & Componentes</h3>
+                      </div>
+                      <div className="space-y-4 text-sm text-slate-600">
+                        <div className="flex gap-3">
+                          <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                          <p><strong>Estilo:</strong> {result.layout.style}</p>
+                        </div>
+                        <div className="flex gap-3">
+                          <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                          <p><strong>Header:</strong> {result.layout.header}</p>
+                        </div>
+                        <div className="flex gap-3">
+                          <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                          <p><strong>Botões:</strong> {result.layout.buttons}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* COLUNA 3: IDEIAS */}
+                  <div className="space-y-8">
+                    <div className="p-8 rounded-[32px] bg-gradient-to-br from-brand-blue-dark to-brand-purple text-white">
+                      <div className="flex items-center gap-3 mb-6">
+                        <Sparkles className="text-brand-blue-light" />
+                        <h3 className="text-xl font-bold">Ideias Criativas</h3>
+                      </div>
+                      <ul className="space-y-4">
+                        {result.ideas.map((idea: string, idx: number) => (
+                          <li key={idx} className="flex gap-3 text-sm leading-relaxed">
+                            <span className="text-brand-blue-light font-bold">{idx + 1}.</span>
+                            {idea}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* INTERACTIVE LIVE PREVIEW SECTION */}
+                <div className="mt-16">
+                  <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+                    <h3 className="text-2xl font-extrabold text-brand-blue-dark flex items-center gap-2">
+                      <Monitor className="text-brand-purple" /> Preview Interativo
+                    </h3>
+                    <div className="flex bg-slate-100 p-1 rounded-2xl">
+                      <button 
+                        onClick={() => setViewMode("desktop")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === "desktop" ? "bg-white shadow-sm text-brand-purple" : "text-slate-400"}`}
+                      >
+                        <Monitor size={14} /> Desktop
+                      </button>
+                      <button 
+                        onClick={() => setViewMode("mobile")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${viewMode === "mobile" ? "bg-white shadow-sm text-brand-purple" : "text-slate-400"}`}
+                      >
+                        <Smartphone size={14} /> Mobile
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <motion.div 
+                      animate={{ width: viewMode === "desktop" ? "100%" : "375px" }}
+                      className="bg-slate-900 rounded-[40px] p-2 md:p-4 shadow-2xl overflow-hidden transition-all duration-500"
+                    >
+                      {/* Browser Chrome */}
+                      <div className="bg-slate-800 rounded-t-3xl p-3 flex items-center gap-2 mb-0 border-b border-slate-700">
+                        <div className="flex gap-1.5">
+                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        </div>
+                        <div className="mx-auto bg-slate-700 rounded-lg px-4 py-1 text-[10px] text-slate-400 w-1/2 text-center truncate">
+                          www.seusite.com.br
+                        </div>
+                      </div>
+
+                      {/* Site Content Simulation */}
+                      <div 
+                        className="bg-white min-h-[600px] rounded-b-3xl overflow-y-auto overflow-x-hidden relative scrollbar-hide"
+                        style={{ 
+                          fontFamily: result.typography.body,
+                          backgroundColor: result.colorPalette.find((c: any) => c.usage.toLowerCase().includes('fundo') || c.usage.toLowerCase().includes('background'))?.hex || '#ffffff'
+                        }}
+                      >
+                        {/* Notification Inside Preview */}
+                        <AnimatePresence>
+                          {previewNotification && (
+                            <motion.div 
+                              initial={{ y: -50, opacity: 0 }}
+                              animate={{ y: 20, opacity: 1 }}
+                              exit={{ y: -50, opacity: 0 }}
+                              className="absolute top-0 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-2 rounded-full text-[10px] font-bold flex items-center gap-2 shadow-2xl"
+                            >
+                              <Bell size={12} className="text-brand-magenta" />
+                              {previewNotification}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Mock Header */}
+                        <header 
+                          className="p-6 flex justify-between items-center sticky top-0 bg-inherit z-40"
+                          style={{ borderBottom: `1px solid ${result.colorPalette[0].hex}20` }}
+                        >
+                          <div 
+                            className="font-bold text-xl cursor-pointer hover:opacity-70 transition-opacity" 
+                            style={{ fontFamily: result.typography.heading, color: result.colorPalette[0].hex }}
+                            onClick={() => showNotification("Navegando para Home")}
+                          >
+                            LOGO
+                          </div>
+                          
+                          {viewMode === "desktop" ? (
+                            <nav className="flex gap-6 text-xs font-semibold opacity-70">
+                              {["Home", "Serviços", "Sobre", "Contato"].map(item => (
+                                <span 
+                                  key={item} 
+                                  className="cursor-pointer hover:text-brand-magenta transition-colors"
+                                  onClick={() => showNotification(`Abrindo ${item}`)}
+                                >
+                                  {item}
+                                </span>
+                              ))}
+                            </nav>
+                          ) : (
+                            <Menu size={20} className="opacity-70" onClick={() => showNotification("Menu Mobile Aberto")} />
+                          )}
+
+                          <button 
+                            className="px-5 py-2 rounded-full text-[10px] font-bold text-white shadow-md hover:scale-105 active:scale-95 transition-all"
+                            style={{ backgroundColor: result.colorPalette.find((c: any) => c.usage.toLowerCase().includes('ação') || c.usage.toLowerCase().includes('cta') || c.usage.toLowerCase().includes('botão'))?.hex || result.colorPalette[0].hex }}
+                            onClick={() => showNotification("Botão de Ação Clicado!")}
+                          >
+                            Ação
+                          </button>
+                        </header>
+
+                        {/* Mock Hero */}
+                        <div className={`p-8 md:p-16 text-center ${viewMode === "mobile" ? "pt-12" : "pt-20"}`}>
+                          <motion.h4 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="text-3xl md:text-5xl font-bold mb-6 leading-tight"
+                            style={{ fontFamily: result.typography.heading, color: result.colorPalette[0].hex }}
+                          >
+                            {prompt.split(' ').slice(0, 6).join(' ')}
+                          </motion.h4>
+                          <p className="text-sm md:text-base opacity-70 max-w-md mx-auto mb-10 leading-relaxed">
+                            {result.toneOfVoice.description.split('.').slice(0, 2).join('. ')}.
+                          </p>
+                          <div className="flex flex-col sm:flex-row justify-center gap-4">
+                            <button 
+                              className="px-10 py-4 rounded-full text-xs font-bold text-white shadow-xl hover:brightness-110 active:scale-95 transition-all"
+                              style={{ backgroundColor: result.colorPalette.find((c: any) => c.usage.toLowerCase().includes('ação') || c.usage.toLowerCase().includes('cta'))?.hex || result.colorPalette[0].hex }}
+                              onClick={() => showNotification("Iniciando Jornada...")}
+                            >
+                              Começar Agora
+                            </button>
+                            <button 
+                              className="px-10 py-4 rounded-full text-xs font-bold border-2 hover:bg-slate-50 active:scale-95 transition-all"
+                              style={{ borderColor: result.colorPalette[0].hex, color: result.colorPalette[0].hex }}
+                              onClick={() => showNotification("Mais informações solicitadas")}
+                            >
+                              Saiba Mais
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Mock Features Section */}
+                        <div className={`grid ${viewMode === "desktop" ? "grid-cols-3" : "grid-cols-1"} gap-6 px-8 md:px-16 pb-16`}>
+                          {[1, 2, 3].map(i => (
+                            <motion.div 
+                              key={i} 
+                              whileHover={{ y: -5 }}
+                              className="p-6 rounded-[32px] border bg-white/50 backdrop-blur-sm cursor-pointer hover:shadow-xl transition-all"
+                              style={{ borderColor: `${result.colorPalette[0].hex}20` }}
+                              onClick={() => showNotification(`Feature ${i} selecionada`)}
+                            >
+                              <div 
+                                className="w-10 h-10 rounded-2xl mb-4 flex items-center justify-center text-white"
+                                style={{ backgroundColor: result.colorPalette[i % result.colorPalette.length].hex }}
+                              >
+                                {i === 1 ? <Rocket size={18} /> : i === 2 ? <Palette size={18} /> : <Sparkles size={18} />}
+                              </div>
+                              <h5 className="font-bold mb-2" style={{ color: result.colorPalette[0].hex }}>Funcionalidade {i}</h5>
+                              <div className="h-2 w-full bg-slate-200 rounded-full mb-2"></div>
+                              <div className="h-2 w-2/3 bg-slate-100 rounded-full"></div>
+                            </motion.div>
+                          ))}
+                        </div>
+
+                        {/* Floating Cursor Mock */}
+                        <div className="absolute bottom-10 right-10 flex items-center gap-2 bg-white/90 backdrop-blur-md shadow-2xl p-3 rounded-2xl border border-slate-200 animate-bounce z-50">
+                          <MousePointer2 size={16} className="text-brand-magenta" />
+                          <span className="text-[10px] font-bold text-slate-600">Clique para Interagir</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
                 </div>
               </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
 
-              <div className="relative">
-                <div className="bg-brand-blue-dark rounded-[40px] p-8 shadow-2xl aspect-square flex flex-col justify-center items-center text-center text-white">
-                  <Smartphone size={80} className="mb-8 text-brand-blue-light" />
-                  <h3 className="text-3xl font-bold mb-4">Mobile First</h3>
-                  <p className="text-blue-100 max-w-xs">
-                    Toda a nossa biblioteca de componentes é otimizada para dispositivos móveis desde o primeiro pixel.
-                  </p>
+        {/* HOW IT WORKS */}
+        {!result && (
+          <section id="sobre" className="py-24 bg-white">
+            <div className="max-w-7xl mx-auto px-6 text-center">
+              <h2 className="text-3xl font-extrabold text-brand-blue-dark mb-16">Como funciona o Gerador?</h2>
+              <div className="grid md:grid-cols-3 gap-12">
+                <div className="space-y-4">
+                  <div className="w-16 h-16 bg-brand-magenta/10 rounded-2xl flex items-center justify-center text-brand-magenta mx-auto text-2xl font-bold">1</div>
+                  <h4 className="font-bold">Descreva sua Ideia</h4>
+                  <p className="text-slate-500 text-sm">Conte-nos sobre seu negócio, público-alvo e o sentimento que deseja passar.</p>
                 </div>
-                {/* Elementos decorativos */}
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-brand-magenta rounded-full opacity-50 blur-3xl"></div>
-                <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-brand-purple rounded-full opacity-50 blur-3xl"></div>
+                <div className="space-y-4">
+                  <div className="w-16 h-16 bg-brand-purple/10 rounded-2xl flex items-center justify-center text-brand-purple mx-auto text-2xl font-bold">2</div>
+                  <h4 className="font-bold">IA Processa o Design</h4>
+                  <p className="text-slate-500 text-sm">Nossa IA analisa tendências de design e psicologia das cores para criar o guia.</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="w-16 h-16 bg-brand-blue-light/10 rounded-2xl flex items-center justify-center text-brand-blue-light mx-auto text-2xl font-bold">3</div>
+                  <h4 className="font-bold">Receba seu Guia</h4>
+                  <p className="text-slate-500 text-sm">Pronto! Você recebe cores, fontes e dicas estruturais para começar seu site.</p>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       {/* FOOTER */}
